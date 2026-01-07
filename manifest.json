@@ -1,12 +1,12 @@
 {
-  "Name": "Redragon Streamcraft SS550",
-  "Description": "Device support plugin for the Redragon Streamcraft SS550",
-  "Author": "MonkeyKiller",
-  "Version": "1.0.3",
-  "PluginUUID": "com.monkeykiller.plugins.opendeck-ss550",
-  "CodePathLin": "opendeck-ss550-linux",
-  "CodePathMac": "opendeck-ss550-mac",
-  "CodePathWin": "opendeck-ss550-win.exe",
+  "Name": "Mirabox 293",
+  "Description": "Device support plugin for the Mirabox 293",
+  "Author": "FantaC4t",
+  "Version": "1.0.0",
+  "PluginUUID": "com.fantac4t.plugins.opendeck-mirabox293",
+  "CodePathLin": "opendeck-mirabox293-linux",
+  "CodePathMac": "opendeck-mirabox293-mac",
+  "CodePathWin": "opendeck-mirabox293-win.exe",
   "Icon": "assets/icon",
   "Category": "Hardware",
   "OS": [
@@ -15,5 +15,5 @@
     { "Platform": "windows", "MinimumVersion": "10" }
   ],
   "Actions": [],
-  "DeviceNamespace": "50"
+  "DeviceNamespace": "93"
 }
