@@ -1,8 +1,8 @@
 ![Plugin Icon](assets/icon.png)
 
-# OpenDeck Redragon Streamcraft SS550 Plugin
+# OpenDeck Mirabox 293 Plugin
 
-An unofficial plugin for Redragon Streamcraft SS550
+An unofficial plugin for Mirabox 293 (15-key, 3x5 layout)
 
 ## OpenDeck version
 
@@ -10,24 +10,20 @@ Requires OpenDeck 2.5.0 or newer
 
 ## Supported devices
 
-- Redragon Streamcraft SS550 (0200:1000)
+- Mirabox 293 (5500:1001)
 
 ## Platform support
 
-- Linux: Guaranteed, if stuff breaks - I'll probably catch it before public release
-- Mac: Best effort, no tests before release, things may break, but I probably have means to fix them
-- Windows: Zero effort, no tests before release, if stuff breaks - too bad, it's up to you to contribute fixes
+- Linux: Primary target
+- Mac: Best effort, things may break
+- Windows: Best effort, things may break
 
 ## Installation
 
-1. Download an archive from [releases](https://github.com/MMonkeyKiller/opendeck-ss550/releases)
+1. Download an archive from [releases](https://github.com/FantaC4t/opendeck-mirabox293/releases)
 2. In OpenDeck: Plugins -> Install from file
-3. Linux: Download [udev rules](./40-opendeck-ss550.rules) and install them by copying into `/etc/udev/rules.d/` and running `sudo udevadm control --reload-rules`
+3. Linux: Download [udev rules](./40-opendeck-mirabox293.rules) and install them by copying into `/etc/udev/rules.d/` and running `sudo udevadm control --reload-rules`
 4. Unplug and plug again the device, restart OpenDeck
-
-## Known issues
-
-- All the "old" devices come with the same serial number. You cannot use two of the same devices at the same time (for example a pair of 153R-s), but you can use two different devices at the same time (for example a 153R and a 153E)
 
 ## Building
 
@@ -40,14 +36,6 @@ You'll need:
 - Docker
 - [just](https://just.systems)
 
-### Preparing environment
-
-```sh
-$ just prepare
-```
-
-This will build docker image for macOS crosscompilation
-
 ### Building a release package
 
 ```sh
@@ -56,4 +44,4 @@ $ just package
 
 ## Acknowledgments
 
-This plugin is heavily based on work by contributors of [elgato-streamdeck](https://github.com/streamduck-org/elgato-streamdeck) crate
+This plugin is based on [opendeck-ss550](https://github.com/MMonkeyKiller/opendeck-ss550) by MMonkeyKiller, which is heavily based on work by contributors of [elgato-streamdeck](https://github.com/streamduck-org/elgato-streamdeck) crate.
