@@ -3,9 +3,8 @@ use mirajazz::{
     types::{HidDeviceInfo, ImageFormat, ImageMirroring, ImageMode, ImageRotation},
 };
 
-// 153 in hex is 99
 // Must be unique between all the plugins, 2 characters long and match `DeviceNamespace` field in `manifest.json`
-pub const DEVICE_NAMESPACE: &str = "50";
+pub const DEVICE_NAMESPACE: &str = "93";
 
 pub const ROW_COUNT: usize = 3;
 pub const COL_COUNT: usize = 5;
@@ -21,24 +20,24 @@ pub const IMAGE_FORMAT: ImageFormat = ImageFormat {
 
 #[derive(Debug, Clone)]
 pub enum Kind {
-    SS550,
+    Mirabox293,
 }
 
-pub const SS550_VID: u16 = 0x0200;
+pub const MIRABOX293_VID: u16 = 0x5500;
 
-pub const SS550_PID: u16 = 0x1000;
+pub const MIRABOX293_PID: u16 = 0x1001;
 
 // Map all queries to usage page 65440 and usage id 1 for now
-pub const SS550_QUERY: DeviceQuery = DeviceQuery::new(65440, 1, SS550_VID, SS550_PID);
+pub const MIRABOX293_QUERY: DeviceQuery = DeviceQuery::new(65440, 1, MIRABOX293_VID, MIRABOX293_PID);
 
-pub const QUERIES: [DeviceQuery; 1] = [SS550_QUERY];
+pub const QUERIES: [DeviceQuery; 1] = [MIRABOX293_QUERY];
 
 impl Kind {
     /// Matches devices VID+PID pairs to correct kinds
     pub fn from_vid_pid(vid: u16, pid: u16) -> Option<Self> {
         match vid {
-            SS550_VID => match pid {
-                SS550_PID => Some(Kind::SS550),
+            MIRABOX293_VID => match pid {
+                MIRABOX293_PID => Some(Kind::Mirabox293),
                 _ => None,
             },
 
@@ -60,7 +59,7 @@ impl Kind {
     /// so we return custom names for all the kinds of devices
     pub fn human_name(&self) -> String {
         match &self {
-            Self::SS550 => "Redragon Streamcraft SS550",
+            Self::Mirabox293 => "Mirabox 293",
         }
         .to_string()
     }
@@ -69,7 +68,7 @@ impl Kind {
     /// two devices with the different revisions at the same time
     pub fn id_suffix(&self) -> String {
         match &self {
-            Self::SS550 => "SS550",
+            Self::Mirabox293 => "M293",
         }
         .to_string()
     }
