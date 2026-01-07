@@ -1,4 +1,4 @@
-id := "com.monkeykiller.plugins.opendeck-ss550.sdPlugin"
+id := "com.fantac4t.plugins.opendeck-mirabox293.sdPlugin"
 
 package: build-linux build-mac build-win collect zip
 
@@ -19,10 +19,10 @@ collect:
     mkdir -p build/{{id}}
     cp -r assets build/{{id}}
     cp manifest.json build/{{id}}
-    cp target/plugin-linux/x86_64-unknown-linux-gnu/release/opendeck-ss550 build/{{id}}/opendeck-ss550-linux
-    cp target/plugin-mac/universal2-apple-darwin/release/opendeck-ss550 build/{{id}}/opendeck-ss550-mac
-    cp target/plugin-win/x86_64-pc-windows-gnu/release/opendeck-ss550.exe build/{{id}}/opendeck-ss550-win.exe
+    cp target/plugin-linux/x86_64-unknown-linux-gnu/release/opendeck-mirabox293 build/{{id}}/opendeck-mirabox293-linux
+    cp target/plugin-mac/universal2-apple-darwin/release/opendeck-mirabox293 build/{{id}}/opendeck-mirabox293-mac
+    cp target/plugin-win/x86_64-pc-windows-gnu/release/opendeck-mirabox293.exe build/{{id}}/opendeck-mirabox293-win.exe
 
 [working-directory: "build"]
 zip:
-    zip -r opendeck-ss550.plugin.zip {{id}}/
+    zip -r opendeck-mirabox293.plugin.zip {{id}}/
