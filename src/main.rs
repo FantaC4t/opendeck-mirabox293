@@ -1,272 +1,56 @@
-use device::{handle_error, handle_set_image};
-use mirajazz::device::Device;
-use openaction::*;
-use std::{collections::HashMap, process::exit, sync::LazyLock};
-use tokio::sync::{Mutex, RwLock, mpsc};
-use tokio::task::spawn_blocking;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use watcher::watcher_task;
-
-#[cfg(not(target_os = "windows"))]
-use tokio::signal::unix::{SignalKind, signal};
-
-#[cfg(target_os = "windows")]
-use windows::{
-    Win32::{Foundation::*, System::LibraryLoader::GetModuleHandleA, UI::WindowsAndMessaging::*},
-    core::s,
-};
-
-mod device;
-mod inputs;
-mod mappings;
-mod watcher;
-
-pub static DEVICES: LazyLock<RwLock<HashMap<String, Device>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
-pub static TOKENS: LazyLock<RwLock<HashMap<String, CancellationToken>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
-pub static TRACKER: LazyLock<Mutex<TaskTracker>> = LazyLock::new(|| Mutex::new(TaskTracker::new()));
-
-#[allow(clippy::type_complexity)]
-pub static BUTTONS: LazyLock<RwLock<HashMap<String, HashMap<u8, Vec<u8>>>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
-
-pub static SUSPENSION_CHANNELS: LazyLock<RwLock<HashMap<String, mpsc::Sender<()>>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
-
-struct GlobalEventHandler {}
-impl openaction::GlobalEventHandler for GlobalEventHandler {
-    async fn plugin_ready(
-        &self,
-        _outbound: &mut openaction::OutboundEventManager,
-    ) -> EventHandlerResult {
-        let tracker = TRACKER.lock().await.clone();
-
-        let token = CancellationToken::new();
-        tracker.spawn(watcher_task(token.clone()));
-
-        TOKENS
-            .write()
-            .await
-            .insert("_watcher_task".to_string(), token);
-
-        log::info!("Plugin initialized");
-
-        Ok(())
-    }
-
-    async fn set_image(
-        &self,
-        event: SetImageEvent,
-        _outbound: &mut OutboundEventManager,
-    ) -> EventHandlerResult {
-        log::debug!("Asked to set image: {:#?}", event);
-
-        // Skip knobs images
-        if event.controller == Some("Encoder".to_string()) {
-            log::debug!("Looks like a knob, no need to set image");
-            return Ok(());
-        }
-
-        let id = event.device.clone();
-
-        if let Some(device) = DEVICES.read().await.get(&event.device) {
-            handle_set_image(device, event)
-                .await
-                .map_err(async |err| handle_error(&id, err).await)
-                .ok();
-        } else {
-            log::error!("Received event for unknown device: {}", event.device);
-        }
-
-        Ok(())
-    }
-
-    async fn set_brightness(
-        &self,
-        event: SetBrightnessEvent,
-        _outbound: &mut OutboundEventManager,
-    ) -> EventHandlerResult {
-        log::debug!("Asked to set brightness: {:#?}", event);
-
-        let id = event.device.clone();
-
-        if let Some(device) = DEVICES.read().await.get(&event.device) {
-            if event.brightness == 0 {
-                device
-                    .sleep()
-                    .await
-                    .map_err(async |err| handle_error(&id, err).await)
-                    .ok();
-            } else {
-                device
-                    .set_brightness(event.brightness)
-                    .await
-                    .map_err(async |err| handle_error(&id, err).await)
-                    .ok();
-            }
-        } else {
-            log::error!("Received event for unknown device: {}", event.device);
-        }
-
-        Ok(())
-    }
-
-    async fn system_did_wake_up(
-        &self,
-        event: SystemDidWakeUpEvent,
-        _outbound: &mut OutboundEventManager,
-    ) -> EventHandlerResult {
-        log::debug!("System did wake up: {:#?}", event);
-
-        for device in DEVICES.read().await.values() {
-            let mut buf = vec![0x00, 0x43, 0x52, 0x54, 0x00, 0x00, 0x44, 0x49, 0x53]; // Wake Screen command
-            device.write_extended_data(&mut buf).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn device_did_disconnect(
-        &self,
-        event: DeviceDidDisconnectEvent,
-        _outbound: &mut OutboundEventManager,
-    ) -> EventHandlerResult {
-        log::debug!("Device did disconnect: {:#?}", event);
-
-        if let Some(token) = TOKENS.write().await.remove(&event.device) {
-            token.cancel();
-            if let Some(device) = DEVICES.write().await.remove(&event.device) {
-                device.shutdown().await?;
-            }
-        } else {
-            log::error!("Received event for unknown device: {}", event.device);
-        }
-        Ok(())
-    }
-}
-
-struct ActionEventHandler {}
-impl openaction::ActionEventHandler for ActionEventHandler {}
-
-async fn shutdown() {
-    let tokens = TOKENS.write().await;
-
-    for (_, token) in tokens.iter() {
-        token.cancel();
-    }
-}
-
-async fn connect() {
-    if let Err(error) = init_plugin(GlobalEventHandler {}, ActionEventHandler {}).await {
-        log::error!("Failed to initialize plugin: {}", error);
-
-        exit(1);
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-async fn sigterm() -> Result<(), Box<dyn std::error::Error>> {
-    let mut sig = signal(SignalKind::terminate())?;
-
-    sig.recv().await;
-
-    Ok(())
-}
-
-#[cfg(target_os = "windows")]
-async fn sigterm() -> Result<(), Box<dyn std::error::Error>> {
-    spawn_blocking(|| {
-        log::debug!("Creating dummy window to catch messages");
-        let instance = unsafe { GetModuleHandleA(None).unwrap_or_default() };
-        let window_class = s!("__ss550_event_listener");
-
-        unsafe extern "system" fn wnd_proc(
-            hwnd: HWND,
-            msg: u32,
-            wparam: WPARAM,
-            lparam: LPARAM,
-        ) -> LRESULT {
-            match msg {
-                WM_DESTROY => {
-                    log::debug!("Received WM_DESTROY");
-                    unsafe { PostQuitMessage(0) };
-                    LRESULT(0)
-                }
-                WM_ENDSESSION => {
-                    log::debug!("Received WM_ENDSESSION");
-                    unsafe { PostQuitMessage(0) };
-                    LRESULT(0)
-                }
-                _ => unsafe { DefWindowProcA(hwnd, msg, wparam, lparam) },
-            }
-        }
-
-        let wnd_class = WNDCLASSA {
-            hInstance: instance.into(),
-            lpszClassName: window_class,
-            lpfnWndProc: Some(wnd_proc),
-            ..Default::default()
-        };
-
-        unsafe {
-            RegisterClassA(&wnd_class);
-
-            CreateWindowExA(
-                WINDOW_EX_STYLE::default(),
-                window_class,
-                s!("__ss550_dummy_window"),
-                WS_OVERLAPPEDWINDOW,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                None,
-                None,
-                Some(instance.into()),
-                None,
-            )
-            .expect("Failed to create window");
-
-            log::debug!("Starting message loop");
-            let mut msg = MSG::default();
-            while GetMessageA(&mut msg, None, 0, 0).into() {
-                DispatchMessageA(&msg);
-            }
-            log::debug!("Message loop exited. Considering it as a sigterm");
-        }
-    })
-    .await?;
-    Ok(())
-}
+// Minimal example wrapper for argument validation before calling openaction::init_plugin
+use std::env;
+use anyhow::Result;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    simplelog::TermLogger::init(
-        simplelog::LevelFilter::Debug,
-        simplelog::Config::default(),
-        simplelog::TerminalMode::Stdout,
-        simplelog::ColorChoice::Never,
-    )
-    .unwrap();
+async fn main() -> Result<()> {
+    let args: Vec<String> = env::args().collect();
 
-    tokio::select! {
-        _ = connect() => {},
-        _ = sigterm() => {},
+    // If no args are provided, exit cleanly (this avoids installer panic)
+    if args.len() <= 1 {
+        println!("opendeck-mirabox293: no args provided; exiting (installer check).");
+        return Ok(());
     }
 
-    log::info!("Shutting down");
+    // Simple helper to get the next value after a flag (like -port)
+    let mut get_flag = |flag: &str| -> Option<String> {
+        args.iter()
+            .position(|x| x.eq_ignore_ascii_case(flag))
+            .and_then(|pos| args.get(pos + 1))
+            .cloned()
+    };
 
-    shutdown().await;
+    let port = match get_flag("-port") {
+        Some(p) => p,
+        None => {
+            eprintln!("Missing required flag: -port");
+            std::process::exit(2);
+        }
+    };
 
-    let tracker = TRACKER.lock().await.clone();
+    let plugin_uuid = match get_flag("-pluginUUID") {
+        Some(u) => u,
+        None => {
+            eprintln!("Missing required flag: -pluginUUID");
+            std::process::exit(2);
+        }
+    };
 
-    log::info!("Waiting for tasks to finish");
+    let register_event = match get_flag("-registerEvent") {
+        Some(e) => e,
+        None => {
+            eprintln!("Missing required flag: -registerEvent");
+            std::process::exit(2);
+        }
+    };
 
-    tracker.close();
-    tracker.wait().await;
-
-    log::info!("Tasks are finished, exiting now");
+    // Now call into the existing init function (adapt the handlers below to your code)
+    // Replace the placeholders with your actual handlers that you previously used.
+    openaction::init_plugin(
+        /* global_event_handler: */ /* your global handler value */,
+        /* action_event_handler: */ /* your action handler value */,
+    )
+    .await?;
 
     Ok(())
 }
